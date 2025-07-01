@@ -1,0 +1,37 @@
+
+docker exec -it real-time-event-logging-and-analytics-platform_new-backend-1 bash
+
+1. **Access the Django Shell**:
+   
+   python manage.py shell
+ 
+
+2. **Create the UserProfile**:
+
+   from django.contrib.auth.models import User
+   from analytics_platform.core.models import UserProfile
+
+   user = User.objects.get(username='admin')
+   UserProfile.objects.create(user=user, role='admin')
+   print("Created UserProfile with role admin")
+
+
+3. **Verify the UserProfile**:
+   Confirm the `UserProfile` was created correctly:
+   ```python
+   user = User.objects.get(username='admin')
+   print(f"User role: {user.userprofile.role}")
+   ```
+   This should output: `User role: admin`.
+
+4. **Exit the Shell**:
+   ```python
+   exit()
+   ```
+
+
+docker-compose exec backend python manage.py migrate                             
+docker-compose exec backend python manage.py createsuperuser                     
+docker-compose down -v  
+docker-compose up --build
+docker-compose exec backend python manage.py makemigrations
