@@ -4,13 +4,14 @@ from rest_framework import status, permissions
 from django.contrib.auth.models import User
 from .models import Event, UserProfile, SystemMetrics, MLInsight
 from .serializers import EventSerializer, Userserializer, SystemMetricsSerializer, AnalyticsSerializer, MLInsightSerializer
-from .tasks import process_event, collect_system_metrics, generate_ml_insights, detect_anaomalies, predict_traffic
+from .tasks import process_event, collect_system_metrics, generate_ml_insights, detect_anomalies, predict_traffic
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db.models import Count
 import docker
 from .permissions import IsAdmin, IsAnalyst  
-
+from rest_framework import status 
+from rest_framework import status as drf_status
 class UserCreateView(APIView):
     permission_classes = [IsAdmin]
 
@@ -104,11 +105,12 @@ class AnomalyDetectionView(APIView):
         time_range = request.data.get('time_range', '1h')
         threshold = float(request.data.get('threshold', 2.5))
 
-        detect_anaomalies.delay(time_range, threshold)
+        task = detect_anomalies.delay(time_range, threshold)
+        result = task.get(timeout=10)
 
         return Response({
-            "message": "Anomaly detection task has been triggered successfully.",
-            "note": "Check DB or logs for results."
+            "message": "Anomaly detection completed.",
+            "anomalies": result.get('anomalies', []),
         })
 
 
@@ -141,14 +143,33 @@ class SystemHealthView(APIView):
         })
 
 
+# class ContainerStatusView(APIView):
+#     permission_classes = [IsAdmin]
+
+#     def get(self, request):
+#         try:
+#             client = docker.from_env()
+#             containers = client.containers.list(all=True)
+#             container_statuses = [{'name': c.name, 'status': c.status} for c in containers]
+#             return Response(container_statuses)
+#         except Exception as e:
+#             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class ContainerStatusView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
         try:
+            import docker
             client = docker.from_env()
             containers = client.containers.list(all=True)
-            status = [{'name': c.name, 'status': c.status} for c in containers]
-            return Response(status)
+            container_statuses = [{'name': c.name, 'status': c.status} for c in containers]
+            return Response(container_statuses)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            import traceback
+            print("⚠️ Docker Error:", traceback.format_exc())
+            return Response(
+                {'error': 'Docker connection failed', 'details': str(e)},
+                status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

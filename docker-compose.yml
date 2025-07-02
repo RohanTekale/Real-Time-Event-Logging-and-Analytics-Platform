@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   backend:
     build: .
@@ -6,6 +8,8 @@ services:
     depends_on:
       - db
       - redis
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # ✅ Mount Docker socket
     environment:
       - DATABASE_URL=postgres://postgres:postgres@db:5432/analytics_db
       - REDIS_URL=redis://redis:6379/0
@@ -19,6 +23,7 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              gunicorn --bind 0.0.0.0:8000 analytics_platform.wsgi:application"
+
   celery:
     build: .
     command: celery -A analytics_platform worker -l info
@@ -35,13 +40,16 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - DEBUG=True
+
   db:
     image: postgres:13
     environment:
       - POSTGRES_DB=analytics_db
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+
   redis:
     image: redis:6
+
   rabbitmq:
     image: rabbitmq:3-management

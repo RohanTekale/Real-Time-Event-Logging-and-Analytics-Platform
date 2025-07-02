@@ -4,6 +4,7 @@ from transformers import pipeline
 import numpy as np
 from .models import Event,SystemMetrics
 import psutil
+from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db.models import Count
 from langchain.prompts import PromptTemplate
@@ -48,20 +49,45 @@ def generate_ml_insights():
         })
     return insights
 
+# @shared_task
+# def detect_anaomalies(time_range='1h',threshold=2.5):
+#     # Get the system metrics for the given time range
+#     end_time = datetime.now()
+#     start_time = end_time - timedelta(hours=int(time_range[:-1]))
+#     events = Event.objects.filter(created_at__range=(start_time,end_time))
+#     # Detect anomalies
+#     if not events.exists():
+#         return {'anamolies':[]}
+#     data = np.array([e.id] for e in events)
+#     model = IsolationForest(contamination=0.1)
+#     model.fit(data)
+#     anamolies = model.predict(data)
+#     return {'anamolies':anamolies.tolist()}
+
 @shared_task
-def detect_anaomalies(time_range='1h'):
-    # Get the system metrics for the given time range
-    end_time = datetime.now()
+def detect_anomalies(time_range='1h', threshold=2.5):
+    # Get events in the specified time range
+    end_time = timezone.now()
     start_time = end_time - timedelta(hours=int(time_range[:-1]))
-    events = Event.objects.filter(created_at__range=(start_time,end_time))
-    # Detect anomalies
+    events = Event.objects.filter(created_at__range=(start_time, end_time))
+
     if not events.exists():
-        return {'anamolies':[]}
-    data = np.array([e.id] for e in events)
-    model = IsolationForest(contamination=0.1)
+        return {'anomalies': []}
+
+    # Prepare dummy feature matrix (you should replace this with real features)
+    data = np.array([[e.id] for e in events])
+
+    # Use threshold to calculate contamination (ensure valid range)
+    contamination = min(0.5, max(0.01, 1.0 / threshold))
+
+    model = IsolationForest(contamination=contamination)
     model.fit(data)
-    anamolies = model.predict(data)
-    return {'anamolies':anamolies.tolist()}
+    predictions = model.predict(data)  # -1 for anomalies, 1 for normal
+
+    anomaly_ids = [events[i].id for i in range(len(predictions)) if predictions[i] == -1]
+
+    return {'anomalies': anomaly_ids}
+
 
 @shared_task
 def predict_traffic(hours=24):
